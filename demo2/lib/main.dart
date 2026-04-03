@@ -11,7 +11,7 @@ class TarjetaApp extends StatelessWidget {
       title: 'Tarjeta de Presentacion',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorSchemeSeed: Colors.deepPurple,
+        colorSchemeSeed: Colors.teal,
         useMaterial3: true, // default desde Flutter 3.16
       ),
       home: const PerfilScreen(),

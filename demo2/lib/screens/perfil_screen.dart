@@ -22,7 +22,7 @@ class PerfilScreen extends StatelessWidget {
             children: const [
               SizedBox(height: 16),
               AvatarWidget(
-                nombre: 'Ana Garcia Lopez',
+                nombre: 'Alexander Huahuaccapa Ccama',
                 rol: 'Estudiante de Ing. de Sistemas',
               ),
               SizedBox(height: 24),

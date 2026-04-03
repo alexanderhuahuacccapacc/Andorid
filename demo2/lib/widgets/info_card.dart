@@ -16,7 +16,7 @@ class InfoCard extends StatelessWidget {
                       color: Colors.deepPurple),
                   title: Text('Correo',
                       style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('ana.garcia@upeu.edu.pe'),
+                  subtitle: Text('77148477@upeu.edu.pe'),
                 ),
                 Divider(indent: 56),
                 ListTile(
@@ -24,7 +24,7 @@ class InfoCard extends StatelessWidget {
                       color: Colors.deepPurple),
                   title: Text('Telefono',
                       style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('+51 987 654 321'),
+                  subtitle: Text('+51 924 489 359'),
                 ),
                 Divider(indent: 56),
                 ListTile(
