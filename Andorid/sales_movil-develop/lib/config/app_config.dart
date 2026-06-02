@@ -1,4 +1,4 @@
 class AppConfig{
-  static const String apiUrl = "100.121.90.36:8000";
+  static const String apiUrl = "192.168.5.136:8000";
 
 }

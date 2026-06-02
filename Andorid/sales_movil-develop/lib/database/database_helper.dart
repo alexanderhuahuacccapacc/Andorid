@@ -3,10 +3,11 @@ import 'package:path/path.dart';
 
 class DatabaseHelper {
   static const String _dbName = 'sales.db';
-  static const int _version = 3;
+  static const int _version = 5;
   static const String _tableClients = 'clients';
   static const String _tableSuppliers = 'suppliers';
   static const String _tableSales = 'sales';
+  static const String _tableSaleDetails = 'sale_details';
 
   static final DatabaseHelper instance = DatabaseHelper._internal();
   static Database? _database;
@@ -57,25 +58,34 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE $_tableSales (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        customer_id INTEGER NOT NULL,
-        product_id INTEGER NOT NULL,
-        quantity INTEGER NOT NULL DEFAULT 1,
+        client_id INTEGER NOT NULL,
+        client_name TEXT,
+        subtotal REAL NOT NULL,
+        igv REAL NOT NULL,
         total REAL NOT NULL,
         date TEXT,
-        customer_name TEXT,
-        product_name TEXT,
         is_synced INTEGER DEFAULT 0,
         server_id INTEGER
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE $_tableSaleDetails (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sale_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        product_name TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        price REAL NOT NULL,
+        subtotal REAL NOT NULL,
+        FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
       )
     ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // v1 → v2: agregar server_id a clients y crear suppliers
     if (oldVersion < 2) {
-      await db.execute(
-        'ALTER TABLE $_tableClients ADD COLUMN server_id INTEGER',
-      );
+      await db.execute('ALTER TABLE $_tableClients ADD COLUMN server_id INTEGER');
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $_tableSuppliers (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,26 +100,41 @@ class DatabaseHelper {
       ''');
     }
 
-    // v2 → v3: crear tabla sales  ← bloque separado, NO anidado
     if (oldVersion < 3) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS $_tableSales (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          customer_id INTEGER NOT NULL,
-          product_id INTEGER NOT NULL,
-          quantity INTEGER NOT NULL DEFAULT 1,
+          client_id INTEGER NOT NULL,
+          client_name TEXT,
+          subtotal REAL NOT NULL,
+          igv REAL NOT NULL,
           total REAL NOT NULL,
           date TEXT,
-          customer_name TEXT,
-          product_name TEXT,
           is_synced INTEGER DEFAULT 0,
           server_id INTEGER
         )
       ''');
     }
+
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_tableSaleDetails (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sale_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          product_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          price REAL NOT NULL,
+          subtotal REAL NOT NULL,
+          FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE
+        )
+      ''');
+    }
   }
 
-  // Métodos genéricos que funcionan para cualquier tabla
+  // ─────────────────────────────────────────────────────────────
+  // Métodos genéricos
+  // ─────────────────────────────────────────────────────────────
   Future<int> insert(String table, Map<String, dynamic> row) async {
     final db = await database;
     return await db.insert(table, row);
@@ -123,6 +148,12 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> queryAll(String table) async {
     final db = await database;
     return await db.query(table, orderBy: 'id DESC');
+  }
+
+  Future<List<Map<String, dynamic>>> queryWhere(
+      String table, String where, List<dynamic> args) async {
+    final db = await database;
+    return await db.query(table, where: where, whereArgs: args);
   }
 
   Future<List<Map<String, dynamic>>> queryPending(String table) async {
@@ -158,5 +189,61 @@ class DatabaseHelper {
   Future<void> deleteAll(String table) async {
     final db = await database;
     await db.delete(table);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Métodos específicos para ventas con detalles
+  // ─────────────────────────────────────────────────────────────
+  Future<int> insertSaleWithDetails(
+      Map<String, dynamic> saleRow,
+      List<Map<String, dynamic>> detailsRows) async {
+    final db = await database;
+    return await db.transaction((txn) async {
+      final saleId = await txn.insert(_tableSales, saleRow);
+      for (var detail in detailsRows) {
+        final detailCopy = Map<String, dynamic>.of(detail);
+        detailCopy['sale_id'] = saleId;
+        await txn.insert(_tableSaleDetails, detailCopy);
+      }
+      return saleId;
+    });
+  }
+
+  Future<Map<String, dynamic>?> getSaleWithDetails(int saleId) async {
+    final db = await database;
+    final sales = await db.query(_tableSales, where: 'id = ?', whereArgs: [saleId]);
+    if (sales.isEmpty) return null;
+
+    // ✅ FIX: convertir a mapa mutable antes de agregar 'details'
+    final sale = Map<String, dynamic>.of(sales.first);
+    final details = await db.query(_tableSaleDetails,
+        where: 'sale_id = ?', whereArgs: [saleId]);
+    sale['details'] = details;
+    return sale;
+  }
+
+  Future<List<Map<String, dynamic>>> getAllSalesWithDetails() async {
+    final db = await database;
+    final rawSales = await db.query(_tableSales, orderBy: 'id DESC');
+
+    // ✅ FIX PRINCIPAL: convertir cada mapa a uno mutable con Map.of()
+    // sqflite devuelve mapas de solo lectura — asignar sale['details'] crasheaba
+    final sales = rawSales.map((s) => Map<String, dynamic>.of(s)).toList();
+
+    for (var sale in sales) {
+      final details = await db.query(_tableSaleDetails,
+          where: 'sale_id = ?', whereArgs: [sale['id']]);
+      sale['details'] = details;
+    }
+    return sales;
+  }
+
+  Future<void> deleteSaleWithDetails(int saleId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(_tableSaleDetails,
+          where: 'sale_id = ?', whereArgs: [saleId]);
+      await txn.delete(_tableSales, where: 'id = ?', whereArgs: [saleId]);
+    });
   }
 }

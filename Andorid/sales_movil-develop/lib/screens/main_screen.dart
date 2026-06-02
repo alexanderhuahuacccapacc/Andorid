@@ -98,7 +98,7 @@ class MainScreen extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (context) =>
-                    const SaleScreen(),
+                    const SaleListScreen(),
                   ),
                 );
               },
